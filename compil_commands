@@ -1,0 +1,256 @@
+--------------------------------------------------------------------------------------------------------------------------------
+                                                                                                              SDCard
+# To be on safe side erase the first part of your SD Card (also clears the partition table)
+sudo dd if=/dev/zero of=/dev/sde bs=512 count=2048
+# If you wish to keep the partition table
+sudo dd if=/dev/zero of=/dev/sde bs=512 count=2046 seek=2
+
+cat <<EOT | sfdisk /dev/sde
+start=17MiB,size=16MiB,type=c
+start=33MiB,size=36MiB,type=83
+start=69MiB,size=500MiB,type=83
+start=596MiB,type=5
+size=300MiB,type=83
+size=16MiB,type=83
+size=36MiB,type=83
+size=125MiB,type=83
+size=16MiB,type=83
+type=83
+EOT
+
+mkfs.ext4 -L system /dev/sde1
+mkfs.ext4 -L cache  /dev/sde2
+mkfs.ext4 -L data   /dev/sde3
+
+tune2fs -O ^huge_file /dev/sde1
+tune2fs -O ^huge_file /dev/sde2
+tune2fs -O ^huge_file /dev/sde3
+
+simg2img system.img system1.img
+mkdir system
+mount -o loop system1.img system
+cd system
+tar -cpvf ../system.tar *
+cd ..
+umount system
+
+mount ${card}3 /mnt
+tar -xpvf system.tar -C /mnt
+umount /mnt
+
+--------------------------------------------------------------------------------------------------------------------------------
+                                                                                                            u-boot-sunxi
+cd /dvl
+git clone git://git.denx.de/u-boot-sunxi.git <path_to_dir>
+git checkout v2017.11
+
+#git remote add u-boot git://git.denx.de/u-boot.git
+#git fetch u-boot
+#git checkout -b v2017.11 u-boot/master
+
+cd u-boot-sunxi
+cp /dvl/u-boot-sunxi/configs/q8_a33_tablet_1024x600_defconfig /tks/u-boot-sunxi/configs/mb734_defconfig
+ln -s /tks/u-boot-sunxi/configs/mb734_defconfig /dvl/u-boot-sunxi/configs/mb734_defconfig
+cp /dvl/u-boot-sunxi/arch/arm/dts/sun8i-a33-inet-d978-rev2.dts /tks/u-boot-sunxi/arch/arm/dts/sun8i-a33-mb734.dts
+ln -s /tks/u-boot-sunxi/arch/arm/dts/sun8i-a33-mb734.dts /dvl/u-boot-sunxi/arch/arm/dts/sun8i-a33-mb734.dts
+
+cd /dvl/u-boot-sunxi
+make -j 8 CROSS_COMPILE=arm-linux-gnueabihf- distclean
+make -j 8 CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/u-boot-sunxi_out distclean
+make -j 8 CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/u-boot-sunxi_out mb734_config
+make -j 8 CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/u-boot-sunxi_out menuconfig
+make -j 8 CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/u-boot-sunxi_out all
+
+sudo dd of=/dev/sde if=/tks/u-boot-sunxi_out/spl/sunxi-spl.bin bs=512 seek=16 conv=sync status=progress ; sync
+sudo dd of=/dev/sde if=/tks/u-boot-sunxi_out/u-boot.img        bs=512 seek=80 conv=sync status=progress ; sync
+----------------------------------------------------------
+mmc read ${kernel_addr_r} 800  3A0D
+mmc read ${fdt_addr_r}    4800 26
+bootz ${kernel_addr_r} - ${fdt_addr_r}
+
+--------------------------------------------------------------------------------------------------------------------------------
+                                                                                                            u-boot
+cd /dvl
+git clone git://git.denx.de/u-boot.git <path_to_dir>
+git checkout v2017.11
+
+cd u-boot
+make -j 8 CROSS_COMPILE=arm-linux-gnueabihf- distclean
+make -j 8 CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/u-boot_out distclean
+make -j 8 CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/u-boot_out rpi_defconfig
+make -j 8 CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/u-boot_out menuconfig
+make -j 8 CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/u-boot_out all
+
+--------------------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------
+                                                                                                    mainline linux
+cd /dvl
+
+--------------------------------------------------------------------------------------------------------------------------------
+                                                                                             stable mainline linux
+cd /dvl
+git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
+cd /dvl/linux-stable
+
+
+git clone https://github.com/raspberrypi/linux.git
+git remote add stable git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
+git fetch stable
+git diff  v3.2.27 > rpi_linux_3.2.27.patch
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+                                                                           official        Raspberry Pi Tools
+git clone https://github.com/raspberrypi/tools.git /dvl/rpi-tools
+
+--------------------------------------------------------------------------------------------------------------------------------
+                                                                                                    rpi-linux
+cd /dvl
+git clone https://github.com/raspberrypi/linux.git rpi-linux
+cd /dvl/rpi-linux
+
+
+KERNEL_SRC=/dvl/rpi-linux
+CCPREFIX=/dvl/rpi-tools/arm-bcm2708/arm-bcm2708-linux-gnueabi/arm-bcm2708-linux-gnueabi/bin
+
+make -j 8 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf-                      mrproper
+make -j 8 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf-                      distclean
+make -j 8 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/rpi-linux_out distclean
+make -j 8 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/rpi-linux_out bcmrpi_defconfig
+make -j 8 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/rpi-linux_out bcm2708-rpi-b.dtb
+
+--------------------------------------------------------------------------------------------------------------------------------
+                                                     RPI 3 Model B (0xa02082)              Android Things rpi3
+OIM1.171126.016 - 0.6.1-devpreview
+
+sudo dd if=/tks/devs/rpi3/stock/iot/iot_rpi3.img of=/dev/sde bs=4M conv=fsync status=progress
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+                                                                                        android common linux
+
+cd /dvl       
+git clone https://android.googlesource.com/kernel/common
+cd /dvl/common                                                     # alias cm="cd /dvl/common && l"
+git checkout android-4.9
+cd /dvl/common
+source /dvl/common/kernel/configs/android-fetch-configs.sh
+cp /dvl/common/arch/arm/configs/sunxi_defconfig /tks/common/arch/arm/configs/mb734.cfg
+
+cp arch/arm/boot/dts/sun8i-a33-inet-d978-rev2.dts /tks/common/arch/arm/boot/dts/sun8i-a33-mb734.dts
+ln -s /tks/common/arch/arm/boot/dts/sun8i-a33-mb734.dts arch/arm/boot/dts/sun8i-a33-mb734.dts
+
+make -j 8 ARCH=arm CROSS_COMPILE=arm-linux-androideabi-                   distclean
+make -j 8 ARCH=arm CROSS_COMPILE=arm-linux-androideabi- O=/tks/common_out distclean
+rm /tks/common_out/usr/*
+
+export KCONFIG_CONFIG=/tks/common_out/.config
+ARCH=arm CROSS_COMPILE=arm-linux-androideabi- ./scripts/kconfig/merge_config.sh -m -r   \
+/tks/common/arch/arm/configs/mb734.cfg                                                  \
+kernel/configs/android-base.cfg                                                         \
+kernel/configs/android-recommended.cfg
+
+make -j 8 ARCH=arm CROSS_COMPILE=arm-linux-androideabi- O=/tks/common_out menuconfig
+make -j 8 ARCH=arm CROSS_COMPILE=arm-linux-androideabi- O=/tks/common_out zImage
+make -j 8 ARCH=arm CROSS_COMPILE=arm-linux-androideabi- O=/tks/common_out sun8i-a33-mb734.dtb
+
+sudo dd of=/dev/sde if=/tks/common_out/arch/arm/boot/zImage                  bs=512 seek=2048  conv=sync status=progress ; sync
+sudo dd of=/dev/sde if=/tks/common_out/arch/arm/boot/dts/sun8i-a33-mb734.dtb bs=512 seek=18432 conv=sync status=progress ; sync
+
+
+
+
+
+-----------------------------------------------------------------------------------------------------------------
+                                       NZH54B  android-7.1.2_r27                                   android
+                     odroid-c2         MTC20K  android-6.0.1_r67
+                     mi5s              MXB48T  android-6.0.1_r16
+
+mkdir /dvl/aosp
+cd /dvl/aosp
+git config --global core.autocrlf input
+git config --global user.name "Erdal T Cevik"                          // No non-English chars allowed
+git config --global user.email "erdaltcevik@gmail.com"
+repo init -u https://android.googlesource.com/platform/manifest -b android-7.1.2_r27
+repo sync
+
+export OUT_DIR_COMMON_BASE=/tks/aosp_out
+make clobber
+source build/envsetup.sh
+choosecombo
+   -debug
+   -generic
+   -eng
+make -j 8
+
+mkdir /tks/aosp_out/aosp/debug/target/product/generic/ramdisk
+cd /tks/aosp_out/aosp/debug/target/product/generic/ramdisk
+gunzip -c /tks/aosp_out/aosp/debug/target/product/generic/ramdisk.img | cpio -i
+
+
+
+sudo mount -o loop /tks/aosp_out/aosp/debug/target/product/generic/system.img /mnt
+
+-----------------------------------------------------------------------------------------------------------------
+                                                                                                      Busybox
+cd /dvl
+git clone git://busybox.net/busybox.git
+git checkout 1_27_2
+
+make -j 8 distclean
+make -j 8 O=/tks/busybox_out distclean
+
+make -j 8 CROSS_COMPILE=arm-linux-androideabi- O=/tks/busybox_out android_defconfig
+make -j 8 CROSS_COMPILE=arm-linux-androideabi- O=/tks/busybox_out android2_defconfig
+make -j 8 CROSS_COMPILE=arm-linux-androideabi- O=/tks/busybox_out android_502_defconfig
+make -j 8 CROSS_COMPILE=arm-linux-androideabi- O=/tks/busybox_out android_ndk_defconfig
+
+make -j 8 O=/tks/busybox_out android_defconfig
+make -j 8 O=/tks/busybox_out android2_defconfig
+make -j 8 O=/tks/busybox_out android_502_defconfig
+make -j 8 O=/tks/busybox_out android_ndk_defconfig
+
+
+make -j 8 CROSS_COMPILE=arm-linux-androideabi- O=/tks/busybox_out menuconfig
+
+make -j 8 CROSS_COMPILE=arm-linux-gnueabihf- O=/tks/busybox_out
+
+
+
+-----------------------------------------------------------------------------------------------------------------
+                                                                                                      odroid-xu4
+cat system_ab system_ac >> system_ab.cat
+cat system_aa system_ab.cat >> system
+simg2img system system.raw
+
+
+
+-----------------------------------------------------------------------------------------------------------------
+                                                                                                  androidization
+
+git clone http://git.linaro.org/git/people/dmart/linux-3-arm.git -b arm/vexpressdt-rtsm
+git checkout -b android
+
+git remote add androidization git://git.linaro.org/landing-teams/working/ti/kernel.git
+
+git fetch androidization
+
+git rebase remotes/androidization/linaro-androidization-tracking
+
+
+git log --pretty=oneline --format="%Cgreen%h %Creset%s" --grep="Linux 4.9." -n 20
+
+
+
+
+
+
+
+
+
+
+
+
+
