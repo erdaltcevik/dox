@@ -48,7 +48,7 @@ git checkout v2017.11
 #git fetch u-boot
 #git checkout -b v2017.11 u-boot/master
 
-cd u-boot-sunxi
+cd /dvl/u-boot-sunxi
 cp /dvl/u-boot-sunxi/configs/q8_a33_tablet_1024x600_defconfig /tks/u-boot-sunxi/configs/mb734_defconfig
 ln -s /tks/u-boot-sunxi/configs/mb734_defconfig /dvl/u-boot-sunxi/configs/mb734_defconfig
 cp /dvl/u-boot-sunxi/arch/arm/dts/sun8i-a33-inet-d978-rev2.dts /tks/u-boot-sunxi/arch/arm/dts/sun8i-a33-mb734.dts
