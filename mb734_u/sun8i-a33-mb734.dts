@@ -45,6 +45,6 @@
 #include "sun8i-q8-common.dtsi"
 
 / {
-	model = "MB-734 A33 Tablet";
-	compatible = "allwinner,mb734-a33", "allwinner,sun8i-a33";
+	model = "Q8 A33 Tablet";
+	compatible = "allwinner,q8-a33", "allwinner,sun8i-a33";
 };
